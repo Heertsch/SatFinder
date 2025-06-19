@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "support.hb9hci.satfinder"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "support.hb9hci.satfinder"
@@ -32,4 +32,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation(libs.androidx.activity)
 }

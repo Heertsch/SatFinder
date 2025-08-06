@@ -1,6 +1,6 @@
 package support.hb9hci.satfinder
-import android.view.View
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,22 +10,29 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Bundle
-import android.widget.*
+import android.util.Log
+import android.view.View
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import kotlin.math.*
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
 
-class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener {
+class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener, OnMapReadyCallback {
 
     private lateinit var sensorManager: SensorManager
-    private lateinit var locationManager: LocationManager
-    private lateinit var compassView: ImageView
+    private lateinit var locationHelper: LocationHelper
     private lateinit var overlayText: TextView
     private lateinit var selectButton: Button
     private lateinit var azimuthArrow: View
     private lateinit var elevationArrow: View
+
+    private var googleMap: GoogleMap? = null
 
     private var currentAzimuth = 0.0
     private var currentPitch = 0.0
@@ -36,138 +43,297 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     private var satLon = 8.0
     private var satAltMeters = 500000.0
 
+    private var lastGoodLocation: Location? = null
+
+    private var tle1: String? = null
+    private var tle2: String? = null
+    private var satName: String? = null
+
+    //private var maxLosElevation: Double = Double.NEGATIVE_INFINITY
+    //private var lastAos: Boolean = false
+
+    private var periodMin: Double = 92.0
+    private var inclination: Double = 51.6
+    private var heightKm: Double = 420.0
+
+    private var aosTime: Long = -1
+    private var losTime: Long = -1
+
+    // Remove deprecated startActivityForResult usage and use Activity Result API
+    private val selectSatelliteLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        Log.d("SatFinder2", "selectSatelliteLauncher called: result=$result")
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            ActivityResultHelper.handleSatelliteSelectionResult(
+                this,
+                data
+            ) { tle1New, tle2New, satNameNew, satLatNew, satLonNew, satAltMetersNew, periodMinNew, inclinationNew, heightKmNew, aosTimeNew, losTimeNew ->
+                Log.d("SatFinder2", "selectSatelliteLauncher: tle1New=$tle1New, tle2New=$tle2New, satNameNew=$satNameNew")
+                tle1 = tle1New
+                tle2 = tle2New
+                satName = satNameNew
+                satLat = satLatNew
+                satLon = satLonNew
+                satAltMeters = satAltMetersNew
+                periodMin = periodMinNew
+                inclination = inclinationNew
+                heightKm = heightKmNew
+                aosTime = aosTimeNew
+                losTime = losTimeNew
+                updateOverlay()
+                updateSatelliteDirection()
+            }
+        }
+    }
+
+    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Set screen orientation to portrait
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        Log.d("Sgp4Debug", "Test: MainActivity started")
 
-        compassView = findViewById(R.id.compassImage)
         overlayText = findViewById(R.id.overlayText)
         selectButton = findViewById(R.id.selectSatelliteButton)
         azimuthArrow = findViewById(R.id.azimuthArrow)
         elevationArrow = findViewById(R.id.elevationArrow)
 
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        locationHelper = LocationHelper(this, this)
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (!PermissionHelper.isPermissionGranted(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
         } else {
-            startLocationUpdates()
+            locationHelper.startLocationUpdates()
         }
 
         selectButton.setOnClickListener {
             val intent = Intent(this, SatelliteSelectionActivity::class.java)
-            startActivityForResult(intent, 100)
+            // Example of usage:
+            selectSatelliteLauncher.launch(intent)
+        }
+
+        // Set pivot points after layout to allow rotation around center
+        azimuthArrow.viewTreeObserver.addOnGlobalLayoutListener {
+            azimuthArrow.pivotX = azimuthArrow.width / 2f
+            azimuthArrow.pivotY = azimuthArrow.height / 2f
+        }
+        elevationArrow.viewTreeObserver.addOnGlobalLayoutListener {
+            elevationArrow.pivotX = elevationArrow.width / 2f
+            elevationArrow.pivotY = elevationArrow.height / 2f
+        }
+
+        // Initialize map
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
+
+        // Load last fix from preferences
+        lastGoodLocation = PreferencesHelper.loadLocation(this)
+        // Get TLE data from intent
+        tle1 = intent.getStringExtra("tle1")
+        tle2 = intent.getStringExtra("tle2")
+        satName = intent.getStringExtra("satName")
+        periodMin = intent.getDoubleExtra("periodMin", periodMin)
+        inclination = intent.getDoubleExtra("inclination", inclination)
+        heightKm = intent.getDoubleExtra("heightKm", heightKm)
+        val aosMillis = intent.getLongExtra("aos", -1L)
+        val losMillis = intent.getLongExtra("los", -1L)
+        if (aosMillis > 0 && losMillis > 0) {
+            aosTime = aosMillis
+            losTime = losMillis
+        }
+        // Lade TLE-Daten aus Preferences nur, wenn sie im Intent oder Speicher nicht gültig sind
+        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2) || satName == null) {
+            val (savedTle1, savedTle2, savedSatName) = PreferencesHelper.loadSatelliteData(this)
+            tle1 = savedTle1
+            tle2 = savedTle2
+            satName = savedSatName
+        }
+        // Wenn immer noch keine gültigen TLE-Daten vorhanden sind, Preferences löschen und Auswahl erzwingen
+        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) {
+            // Preferences löschen
+            val prefs = getSharedPreferences("satfinder_prefs", MODE_PRIVATE)
+            prefs.edit().clear().apply()
+            overlayText.text = "Keine oder ungültige TLE-Daten. Bitte wählen Sie einen Satelliten."
+            // Auswahl-Dialog starten
+            val intent = Intent(this, SatelliteSelectionActivity::class.java)
+            selectSatelliteLauncher.launch(intent)
+        } else {
+            updateOverlay()
         }
     }
 
-    private fun startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, this)
+    // Overlay-logic outsourced
+    @SuppressLint("SetTextI18n")
+    private fun updateOverlay() {
+        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) {
+            overlayText.text = "No TLE-data. Select satellite."
+            return
         }
+        OverlayViewHelper.updateOverlay(
+            context = this,
+            overlayText = overlayText,
+            tle1 = tle1,
+            tle2 = tle2,
+            satName = satName,
+            lastGoodLocation = lastGoodLocation,
+            aosTime = aosTime,
+            losTime = losTime
+        )
+    }
+
+    // FixStatus-Logik ausgelagert
+    private fun updateFixStatus() {
+        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) return
+        OverlayViewHelper.updateFixStatus(
+            context = this,
+            overlayText = overlayText,
+            lastGoodLocation = lastGoodLocation,
+            tle1 = tle1,
+            tle2 = tle2,
+            getFixColor = OverlayViewHelper::getFixColor,
+            getGpsStatus = OverlayViewHelper::getGpsStatus
+        )
     }
 
     override fun onResume() {
         super.onResume()
-        val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        rotationSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        LifecycleHelper.registerSensorListener(sensorManager, this, android.hardware.Sensor.TYPE_ROTATION_VECTOR)
+        updateFixStatus()
+        updateOverlay()
+        lastGoodLocation?.let { loc ->
+            MapHelper.updateMapPosition(googleMap, loc)
         }
     }
 
     override fun onPause() {
         super.onPause()
-        sensorManager.unregisterListener(this)
-        locationManager.removeUpdates(this)
+        LifecycleHelper.unregisterSensorListener(sensorManager, this)
     }
+
+    private fun startLocationUpdates() {
+        locationHelper.startLocationUpdates()
+    }
+
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val rotationMatrix = FloatArray(9)
-            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+            val (azimuth, pitch) = SensorHelper.getAzimuthAndPitch(event)
+            currentAzimuth = azimuth
+            currentPitch = pitch
+            updateSatelliteDirection()
+        }
+    }
 
-            val orientation = FloatArray(3)
-            SensorManager.getOrientation(rotationMatrix, orientation)
-
-            currentAzimuth = Math.toDegrees(orientation[0].toDouble())
-            currentPitch = Math.toDegrees(orientation[1].toDouble())
-
-            updateDisplay()
+    override fun onMapReady(map: GoogleMap) {
+        googleMap = map
+        googleMap?.uiSettings?.isMyLocationButtonEnabled = true
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            googleMap?.isMyLocationEnabled = true
+        }
+        // Map-Logik ausgelagert
+        lastGoodLocation?.let {
+            MapHelper.updateMapPosition(googleMap, it)
         }
     }
 
     override fun onLocationChanged(location: Location) {
-        targetAzimuth = SatMath.calculateAzimuth(location.latitude, location.longitude, satLat, satLon)
-        targetElevation = SatMath.calculateElevation(location.latitude, location.longitude, location.altitude, satLat, satLon, satAltMeters)
-
-        val distance = SatMath.calculateDistanceKm(location.latitude, location.longitude, satLat, satLon)
-        val speed = location.speed * 3.6
-        val isAos = targetElevation > 0
-        val isLos = !isAos
-
-        overlayText.text = "AOS/LOS: %s / %s\nDistance: %.1f km\nSpeed: %.1f km/h".format(
-            if (isAos) "AOS" else "--",
-            if (isLos) "LOS" else "--",
-            distance,
-            speed
+        val hasFix = location.hasAccuracy() && location.accuracy < 1000
+        if (hasFix) {
+            location.time = System.currentTimeMillis()
+            lastGoodLocation = location
+            PreferencesHelper.saveLocation(this, location)
+        }
+        OverlayViewHelper.updateOverlay(
+            context = this,
+            overlayText = overlayText,
+            tle1 = tle1,
+            tle2 = tle2,
+            satName = satName,
+            lastGoodLocation = lastGoodLocation,
+            aosTime = aosTime,
+            losTime = losTime
         )
-
-        updateDisplay()
+        updateSatelliteDirection()
+        MapHelper.updateMapPosition(googleMap, location)
     }
 
-    private fun updateDisplay() {
-        compassView.rotation = -currentAzimuth.toFloat()
+    // Example method to calculate and display the direction to the satellite
+    private fun updateSatelliteDirection() {
+        val tle1 = this.tle1
+        val tle2 = this.tle2
+        val location = lastGoodLocation
+        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2) || location == null) {
+            return
+        }
+        val now = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).time
+        val epoch = TleHelper.extractEpochFromTle(tle1!!)
+        //Log.d("Sgp4Debug", "[updateSatelliteDirection] TLE1=$tle1 TLE2=$tle2 NOW=$now EPOCH=$epoch")
+        if (epoch == null) {
+            android.util.Log.e("Sgp4Debug", "updateSatelliteDirection: Epoch not actualized")
+            return
+        }
+        val satPos = SatelliteMathHelper.getSatellitePosition(tle1!!, tle2!!, now, epoch)
+        if (satPos != null) {
+            // UI-Update ausgelagert
+            OverlayViewHelper.updateSatelliteDirectionOverlay(
+                overlayText = overlayText,
+                location = location,
+                satPos = satPos,
+                satName = satName,
+                currentAzimuth = currentAzimuth,
+                currentPitch = currentPitch,
+                tle1 = tle1!!,
+                tle2 = tle2!!
+            )
+            val azimuth = SatelliteMathHelper.calculateAzimuth(location.latitude, location.longitude, satPos.lat, satPos.lon)
+            val elevation = SatelliteMathHelper.calculateElevation(location.latitude, location.longitude, location.altitude, satPos.lat, satPos.lon, satPos.alt)
+            val azimuthGeo = (450 - azimuth) % 360
+            val azimuthFixed = if (azimuthGeo < 0) azimuthGeo + 360 else azimuthGeo
+            val azError = ((azimuthFixed - currentAzimuth + 540) % 360) - 180
+            val elError = elevation - getDeviceLookElevation()
+            android.util.Log.d("Sgp4Debug", "azError=$azError, elError=$elError, currentAzimuth=$currentAzimuth, currentPitch=$currentPitch")
+            updateAzimuthBar(azError)
+            updateElevationBar(elError)
+        }
+    }
 
-        val azError = (targetAzimuth - currentAzimuth + 540) % 360 - 180
-        val elError = (targetElevation - currentPitch).coerceIn(-90.0, 90.0)
-
-        updateAzimuthBar(azError)
-        updateElevationBar(elError)
+    // Helper function: Calculate the elevation of the device's line of sight relative to the horizon
+    private fun getDeviceLookElevation(): Double {
+        return SensorHelper.getDeviceLookElevation(currentAzimuth, currentPitch)
     }
 
     private fun updateAzimuthBar(error: Double) {
-        val maxWidthPx = 300 * resources.displayMetrics.density
-        val width = (abs(error) / 180.0 * maxWidthPx).toInt().coerceAtLeast(10)
-
-        val layout = azimuthArrow.layoutParams
-        layout.width = width
-        layout.height = 4
-        azimuthArrow.layoutParams = layout
-
-        azimuthArrow.rotation = if (error >= 0) 0f else 180f
+        ArrowViewHelper.updateAzimuthBar(azimuthArrow, error)
     }
 
     private fun updateElevationBar(error: Double) {
-        val maxHeightPx = 300 * resources.displayMetrics.density
-        val height = (abs(error) / 90.0 * maxHeightPx).toInt().coerceAtLeast(10)
-
-        val layout = elevationArrow.layoutParams
-        layout.width = 4
-        layout.height = height
-        elevationArrow.layoutParams = layout
-
-        elevationArrow.rotation = if (error >= 0) 270f else 90f
+        ArrowViewHelper.updateElevationBar(elevationArrow, error)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        if (requestCode == 1 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startLocationUpdates()
-        } else {
-            Toast.makeText(this, "GPS permission is required", Toast.LENGTH_SHORT).show()
-        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        PermissionHelper.handlePermissionResult(
+            requestCode,
+            permissions,
+            grantResults,
+            1,
+            onGranted = {
+                Toast.makeText(this, "Permission granted", Toast.LENGTH_SHORT).show()
+                locationHelper.startLocationUpdates()
+            },
+            onDenied = {
+                Toast.makeText(this, "GPS permission is required", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 100 && resultCode == Activity.RESULT_OK) {
-            data?.let {
-                satLat = it.getDoubleExtra("satLat", satLat)
-                satLon = it.getDoubleExtra("satLon", satLon)
-                satAltMeters = it.getDoubleExtra("satAlt", satAltMeters)
-                Toast.makeText(this, "Satellite selected!", Toast.LENGTH_SHORT).show()
-            }
-        }
+    override fun onDestroy() {
+        locationHelper.stopLocationUpdates()
+        LifecycleHelper.unlockScreenOrientation(this)
+        super.onDestroy()
     }
 }

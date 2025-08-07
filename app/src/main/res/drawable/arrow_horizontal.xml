@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#FF0000FF" />
-    <corners android:radius="4dp" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="60dp"
+    android:height="32dp"
+    android:viewportWidth="60"
+    android:viewportHeight="32">
+
+    <!-- Horizontaler Pfeil für Azimut (blau) -->
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M5,14 L50,14 L50,18 L5,18 Z" />
+
+    <!-- Pfeilspitze -->
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M46,8 L58,16 L46,24 Z" />
+</vector>
 

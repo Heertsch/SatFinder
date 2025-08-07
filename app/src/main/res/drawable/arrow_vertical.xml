@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#FFFF0000" />
-    <corners android:radius="4dp" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="60dp"
+    android:viewportWidth="32"
+    android:viewportHeight="60">
+
+    <!-- Vertikaler Pfeil für Elevation (rot) -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M14,5 L18,5 L18,50 L14,50 Z" />
+
+    <!-- Pfeilspitze -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M8,46 L16,58 L24,46 Z" />
+</vector>
 

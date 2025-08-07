@@ -11,23 +11,23 @@ object ArrowViewHelper {
 
         val layout = azimuthArrow.layoutParams
         layout.width = length
-        layout.height = (16 * azimuthArrow.resources.displayMetrics.density).toInt()
+        layout.height = (26 * azimuthArrow.resources.displayMetrics.density).toInt() // +10px dicker
         azimuthArrow.layoutParams = layout
 
-        // Pivot at the blunt end (center of screen)
-        azimuthArrow.pivotX = 0f
+        // Pivot at the tip (where it should point to center)
+        azimuthArrow.pivotX = length.toFloat() // Pivot an der Spitze
         azimuthArrow.pivotY = azimuthArrow.height / 2f
         azimuthArrow.y = (parent.height / 2f) - (azimuthArrow.height / 2f)
 
-        // Error logic: Arrow points right if the smartphone is too far left (error > 0), left if too far right (error < 0)
+        // Pfeilspitze soll zum Zentrum zeigen
         if (error > 0) {
-            // Arrow to the right
-            azimuthArrow.x = (parent.width / 2f)
-            azimuthArrow.rotation = 0f
-        } else {
-            // Arrow to the left
+            // Handy zu weit links -> Pfeil von links zum Zentrum (Spitze nach rechts)
             azimuthArrow.x = (parent.width / 2f) - length
-            azimuthArrow.rotation = 180f
+            azimuthArrow.rotation = 0f // Original-Richtung nach rechts
+        } else {
+            // Handy zu weit rechts -> Pfeil von rechts zum Zentrum (Spitze nach links)
+            azimuthArrow.x = (parent.width / 2f)
+            azimuthArrow.rotation = 180f // Gedreht nach links
         }
         azimuthArrow.bringToFront()
     }
@@ -40,26 +40,28 @@ object ArrowViewHelper {
         val length = if (abs(error) < 1.0) 0 else (abs(error) / 90.0 * maxHeightPx).toInt().coerceAtLeast(minLengthPx)
 
         val layout = elevationArrow.layoutParams
-        layout.width = (16 * elevationArrow.resources.displayMetrics.density).toInt()
+        layout.width = (26 * elevationArrow.resources.displayMetrics.density).toInt() // +10px dicker
         layout.height = length
         elevationArrow.layoutParams = layout
 
-        // Pivot at the blunt end (center of screen)
+        // Pivot at the tip (where it should point to center)
         elevationArrow.pivotX = elevationArrow.width / 2f
-        elevationArrow.pivotY = 0f // Pivot at the blunt end
+        elevationArrow.pivotY = length.toFloat() // Pivot an der Spitze
         elevationArrow.x = (parent.width / 2f) - (elevationArrow.width / 2f)
 
         if (length == 0) {
             elevationArrow.visibility = View.INVISIBLE
         } else {
             elevationArrow.visibility = View.VISIBLE
-            // Arrow points up if the phone is held too low (error > 0), down if too high (error < 0)
+            // Pfeilspitze soll zum Zentrum zeigen - Position and Rotation anpassen
             if (error > 0) {
+                // Satellit ist höher -> Pfeil von unten zum Zentrum (Spitze nach oben)
                 elevationArrow.y = (parent.height / 2f) - length
-                elevationArrow.rotation = 0f
+                elevationArrow.rotation = 0f // Original-Richtung nach unten, aber von unten positioniert
             } else {
+                // Satellit ist niedriger -> Pfeil von oben zum Zentrum (Spitze nach unten)
                 elevationArrow.y = (parent.height / 2f)
-                elevationArrow.rotation = 180f
+                elevationArrow.rotation = 180f // Gedreht nach oben, aber von oben positioniert
             }
             elevationArrow.bringToFront()
         }

@@ -98,13 +98,23 @@ object OverlayViewHelper {
                 // AOS: Show time only when LOS
                 val fixStatus = if (loc != null && loc.hasAccuracy() && loc.accuracy < 100 && System.currentTimeMillis() - loc.time < 60_000) "Fix" else "no Fix"
                 val aosLosStr = if (aosLos == "LOS" && nextAosStr != "--") "LOS (next rise: $nextAosStr)" else aosLos
+
+                // Satelliten-Position formatieren - sichere Zugriffe auf satPos
+                val latAbs = abs(satPos?.lat ?: 0.0)
+                val lonAbs = abs(satPos?.lon ?: 0.0)
+                val latDir = if ((satPos?.lat ?: 0.0) >= 0) "N" else "S"
+                val lonDir = if ((satPos?.lon ?: 0.0) >= 0) "E" else "W"
+                val satPosFormatted = "Sat_pos %.1f° %s, %.1f° %s".format(latAbs, latDir, lonAbs, lonDir)
+                val heightFormatted = "Height %.0f km".format((satPos?.alt ?: 0.0)/1000.0)
+
                 val text = """
+                    <big><b>$satDisplay</b></big><br>
+                    <small>$satPosFormatted</small><br>
+                    <small>$heightFormatted</small><br>
                     Azimuth: $azStr, Elevation: $elStr<br>
                     Distance: $distStr, Speed: $speedStrRounded<br>
                     Fix: $fixStatus<br>
-                    Status: $aosLosStr<br>
-                    $satPosInfo<br>
-                    Satellite: $satDisplay
+                    Status: $aosLosStr
                 """.trimIndent()
                 overlayText.text = Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY)
             }
@@ -214,20 +224,22 @@ object OverlayViewHelper {
             val aosLos = if (elevation > 0) "AOS" else "LOS"
             val azStr = String.format(Locale.US, "%.1f°", azimuth)
             val elStr = String.format(Locale.US, "%.1f°", elevation)
-            val distStr = String.format(Locale.US, "%.1f km", distance)
+            val distStr = String.format(Locale.US, "%.1f km", distance/1000.0) // Meter zu km konvertieren
             val speedStr = String.format(Locale.US, "%+.1f m/s", speed*1000.0)
             val latDir = if (satPos.lat >= 0) "N" else "S"
             val lonDir = if (satPos.lon >= 0) "E" else "W"
             val latAbs = abs(satPos.lat)
             val lonAbs = abs(satPos.lon)
-            val satPosInfo = "Lat: %.1f° %s, Lon: %.1f° %s, Height: %.0f Km".format(latAbs, latDir, lonAbs, lonDir, satPos.alt/1000.0)
+            val satPosFormatted = "Sat_pos %.1f° %s, %.1f° %s".format(latAbs, latDir, lonAbs, lonDir)
+            val heightFormatted = "Height %.0f km".format(satPos.alt/1000.0)
             val text = """
+                <big><b>${satName ?: "(no name)"}</b></big><br>
+                <small>$satPosFormatted</small><br>
+                <small>$heightFormatted</small><br>
                 Azimuth: $azStr, Elevation: $elStr<br>
-                Distance: $distStr km, Speed: $speedStr<br>
+                Distance: $distStr, Speed: $speedStr<br>
                 Fix: $fixStatus<br>
-                Status: $aosLos<br>
-                Sat-Pos: $satPosInfo<br>
-                Satellite: ${satName ?: "(no name)"}
+                Status: $aosLos
             """.trimIndent()
             overlayText.text = Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY)
         } catch (e: Exception) {

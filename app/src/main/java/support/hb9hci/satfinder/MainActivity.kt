@@ -1,4 +1,5 @@
 package support.hb9hci.satfinder
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -22,6 +23,7 @@ import androidx.core.app.ActivityCompat
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.CameraUpdateFactory
 
 class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener, OnMapReadyCallback {
 
@@ -48,9 +50,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
     private var tle1: String? = null
     private var tle2: String? = null
     private var satName: String? = null
-
-    //private var maxLosElevation: Double = Double.NEGATIVE_INFINITY
-    //private var lastAos: Boolean = false
 
     private var periodMin: Double = 92.0
     private var inclination: Double = 51.6
@@ -110,7 +109,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
         selectButton.setOnClickListener {
             val intent = Intent(this, SatelliteSelectionActivity::class.java)
-            // Example of usage:
             selectSatelliteLauncher.launch(intent)
         }
 
@@ -199,11 +197,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
     override fun onResume() {
         super.onResume()
-        LifecycleHelper.registerSensorListener(sensorManager, this, android.hardware.Sensor.TYPE_ROTATION_VECTOR)
+        LifecycleHelper.registerSensorListener(sensorManager, this, Sensor.TYPE_ROTATION_VECTOR)
         updateFixStatus()
         updateOverlay()
+
+        // Position aktualisieren OHNE Zoom zu ändern
         lastGoodLocation?.let { loc ->
-            MapHelper.updateMapPosition(googleMap, loc)
+            val pos = com.google.android.gms.maps.model.LatLng(loc.latitude, loc.longitude)
+            googleMap?.clear()
+            googleMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                .position(pos)
+                .title("Present Position"))
+            googleMap?.moveCamera(CameraUpdateFactory.newLatLng(pos))
         }
     }
 
@@ -216,7 +221,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         locationHelper.startLocationUpdates()
     }
 
-
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
             val (azimuth, pitch) = SensorHelper.getAzimuthAndPitch(event)
@@ -228,13 +232,30 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
     override fun onMapReady(map: GoogleMap) {
         googleMap = map
+
+        // Standard-Einstellungen für Satelliten-Empfangsbereiche
+        googleMap?.mapType = GoogleMap.MAP_TYPE_SATELLITE
         googleMap?.uiSettings?.isMyLocationButtonEnabled = true
+        googleMap?.uiSettings?.isRotateGesturesEnabled = true
+        googleMap?.uiSettings?.isTiltGesturesEnabled = true
+
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             googleMap?.isMyLocationEnabled = true
         }
+
+        // Vernünftiger Zoom für grosse Gebiete/Kontinente (Zoom 3-4)
+        googleMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(
+            com.google.android.gms.maps.model.LatLng(0.0, 0.0), 3f
+        ))
+
         // Map-Logik ausgelagert
         lastGoodLocation?.let {
-            MapHelper.updateMapPosition(googleMap, it)
+            // Position zentrieren aber Zoom beibehalten
+            val pos = com.google.android.gms.maps.model.LatLng(it.latitude, it.longitude)
+            googleMap?.moveCamera(CameraUpdateFactory.newLatLng(pos))
+            googleMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                .position(pos)
+                .title("Present Position"))
         }
     }
 
@@ -256,7 +277,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
             losTime = losTime
         )
         updateSatelliteDirection()
-        MapHelper.updateMapPosition(googleMap, location)
+
+        // Position aktualisieren OHNE Zoom zu ändern
+        if (hasFix) {
+            val pos = com.google.android.gms.maps.model.LatLng(location.latitude, location.longitude)
+            googleMap?.clear()
+            googleMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                .position(pos)
+                .title("Present Position"))
+            // Nur Position ändern, Zoom beibehalten
+            googleMap?.moveCamera(CameraUpdateFactory.newLatLng(pos))
+        }
     }
 
     // Example method to calculate and display the direction to the satellite
@@ -269,9 +300,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         }
         val now = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).time
         val epoch = TleHelper.extractEpochFromTle(tle1!!)
-        //Log.d("Sgp4Debug", "[updateSatelliteDirection] TLE1=$tle1 TLE2=$tle2 NOW=$now EPOCH=$epoch")
         if (epoch == null) {
-            android.util.Log.e("Sgp4Debug", "updateSatelliteDirection: Epoch not actualized")
+            Log.e("Sgp4Debug", "updateSatelliteDirection: Epoch not actualized")
             return
         }
         val satPos = SatelliteMathHelper.getSatellitePosition(tle1!!, tle2!!, now, epoch)
@@ -293,7 +323,20 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
             val azimuthFixed = if (azimuthGeo < 0) azimuthGeo + 360 else azimuthGeo
             val azError = ((azimuthFixed - currentAzimuth + 540) % 360) - 180
             val elError = elevation - getDeviceLookElevation()
-            android.util.Log.d("Sgp4Debug", "azError=$azError, elError=$elError, currentAzimuth=$currentAzimuth, currentPitch=$currentPitch")
+
+            // Karte leeren (entfernt alte Kreise und Marker) und dann neu befüllen
+            googleMap?.clear()
+
+            // Position-Marker wieder hinzufügen
+            val pos = com.google.android.gms.maps.model.LatLng(location.latitude, location.longitude)
+            googleMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                .position(pos)
+                .title("Present Position"))
+
+            // Empfangskreis auf der Karte anzeigen
+            MapHelper.addCurrentSatelliteCoverage(googleMap, satPos)
+
+            Log.d("Sgp4Debug", "elevation=$elevation, deviceLookElevation=${getDeviceLookElevation()}, elError=$elError, azError=$azError, currentAzimuth=$currentAzimuth, currentPitch=$currentPitch")
             updateAzimuthBar(azError)
             updateElevationBar(elError)
         }

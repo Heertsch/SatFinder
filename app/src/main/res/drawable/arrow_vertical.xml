@@ -5,14 +5,13 @@
     android:viewportWidth="32"
     android:viewportHeight="60">
 
-    <!-- Vertikaler Pfeil für Elevation (rot) -->
+    <!-- Vertikaler Pfeil für Elevation (grün) -->
     <path
-        android:fillColor="#F44336"
+        android:fillColor="#4CAF50"
         android:pathData="M14,5 L18,5 L18,50 L14,50 Z" />
 
     <!-- Pfeilspitze -->
     <path
-        android:fillColor="#F44336"
+        android:fillColor="#4CAF50"
         android:pathData="M8,46 L16,58 L24,46 Z" />
 </vector>
-

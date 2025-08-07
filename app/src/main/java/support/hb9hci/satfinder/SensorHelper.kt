@@ -17,7 +17,8 @@ object SensorHelper {
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
         val orientation = FloatArray(3)
         SensorManager.getOrientation(rotationMatrix, orientation)
-        val azimuth = (Math.toDegrees(orientation[0].toDouble()) + 360) % 360
+        val azimuthRaw = (Math.toDegrees(orientation[0].toDouble()) + 360) % 360
+        val azimuth = (azimuthRaw - 90 + 360) % 360  // Korrektur um -90° für Portrait-Modus
         val pitch = Math.toDegrees(orientation[1].toDouble())
         return Pair(azimuth, pitch)
     }
@@ -30,7 +31,7 @@ object SensorHelper {
      */
     fun getDeviceLookElevation(azimuth: Double, pitch: Double): Double {
         val azRad = Math.toRadians(azimuth)
-        val pitchRad = Math.toRadians(pitch)
+        val pitchRad = Math.toRadians(-pitch)  // Vorzeichen umkehren!
         val x = cos(pitchRad) * sin(azRad)
         val y = cos(pitchRad) * cos(azRad)
         val z = sin(pitchRad)

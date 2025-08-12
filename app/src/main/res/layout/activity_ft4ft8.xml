@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#000000">
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="FT4/FT8 Decoder"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Status Text -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ready to start decoding"
+        android:textSize="16sp"
+        android:textColor="#00FF00"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Control Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Start Decoding"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#006600"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/stopButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Stop Decoding"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#660000"
+            android:layout_marginStart="8dp" />
+
+    </LinearLayout>
+
+    <!-- Instructions -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Instructions:\n• Connect audio output from your radio to the phone's audio input\n• Set radio to 1500 Hz audio frequency\n• Ensure FT4/FT8 mode is selected on your radio\n• Press 'Start Decoding' to begin monitoring"
+        android:textSize="12sp"
+        android:textColor="#CCCCCC"
+        android:layout_marginBottom="16dp"
+        android:background="#222222"
+        android:padding="8dp" />
+
+    <!-- Messages ScrollView -->
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#111111"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/messagesView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Decoded messages will appear here...\n\nFT8 decodes every 15 seconds\nFT4 decodes every 7.5 seconds"
+            android:textSize="12sp"
+            android:textColor="#00FF00"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp" />
+
+    </ScrollView>
+
+    <!-- Footer Info -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="FT4/FT8 Digital Mode Decoder for Amateur Radio\nCompatible with WSJT-X protocols"
+        android:textSize="10sp"
+        android:textColor="#888888"
+        android:gravity="center"
+        android:layout_marginTop="8dp" />
+
+</LinearLayout>

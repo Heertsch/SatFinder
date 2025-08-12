@@ -48,12 +48,29 @@
             android:gravity="center_horizontal" />
     </LinearLayout>
 
-    <!-- Button -->
-    <Button
-        android:id="@+id/selectSatelliteButton"
+    <!-- Buttons -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/SelectSat"
+        android:orientation="horizontal"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="24dp"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/selectSatelliteButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/SelectSat"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/ft4ft8Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FT4/FT8"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#006600" />
+
+    </LinearLayout>
 </FrameLayout>

@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
     private lateinit var locationHelper: LocationHelper
     private lateinit var overlayText: TextView
     private lateinit var selectButton: Button
+    private lateinit var ft4ft8Button: Button
     private lateinit var azimuthArrow: View
     private lateinit var elevationArrow: View
 
@@ -95,6 +96,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
         overlayText = findViewById(R.id.overlayText)
         selectButton = findViewById(R.id.selectSatelliteButton)
+        ft4ft8Button = findViewById(R.id.ft4ft8Button)
         azimuthArrow = findViewById(R.id.azimuthArrow)
         elevationArrow = findViewById(R.id.elevationArrow)
 
@@ -110,6 +112,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         selectButton.setOnClickListener {
             val intent = Intent(this, SatelliteSelectionActivity::class.java)
             selectSatelliteLauncher.launch(intent)
+        }
+
+        ft4ft8Button.setOnClickListener {
+            val intent = Intent(this, FT4FT8Activity::class.java)
+            startActivity(intent)
         }
 
         // Set pivot points after layout to allow rotation around center

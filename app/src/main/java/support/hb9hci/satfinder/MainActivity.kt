@@ -2,7 +2,6 @@ package support.hb9hci.satfinder
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
@@ -24,6 +23,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.CameraUpdateFactory
+import androidx.core.content.edit
 
 class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener, OnMapReadyCallback {
 
@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
     private lateinit var locationHelper: LocationHelper
     private lateinit var overlayText: TextView
     private lateinit var selectButton: Button
+    private lateinit var getFixButton: Button
     private lateinit var azimuthArrow: View
     private lateinit var elevationArrow: View
 
@@ -38,8 +39,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
     private var currentAzimuth = 0.0
     private var currentPitch = 0.0
-    private var targetAzimuth = 0.0
-    private var targetElevation = 0.0
+    //private var targetAzimuth = 0.0
+    //private var targetElevation = 0.0
 
     private var satLat = 45.0
     private var satLon = 8.0
@@ -62,7 +63,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
     private val selectSatelliteLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         Log.d("SatFinder2", "selectSatelliteLauncher called: result=$result")
         val data = result.data
-        if (result.resultCode == Activity.RESULT_OK && data != null) {
+        if (result.resultCode == RESULT_OK && data != null) {
             ActivityResultHelper.handleSatelliteSelectionResult(
                 this,
                 data
@@ -95,6 +96,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
 
         overlayText = findViewById(R.id.overlayText)
         selectButton = findViewById(R.id.selectSatelliteButton)
+        getFixButton = findViewById(R.id.getFixButton)
         azimuthArrow = findViewById(R.id.azimuthArrow)
         elevationArrow = findViewById(R.id.elevationArrow)
 
@@ -110,6 +112,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         selectButton.setOnClickListener {
             val intent = Intent(this, SatelliteSelectionActivity::class.java)
             selectSatelliteLauncher.launch(intent)
+        }
+
+        getFixButton.setOnClickListener {
+            requestManualGpsFix()
         }
 
         // Set pivot points after layout to allow rotation around center
@@ -152,8 +158,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) {
             // Preferences löschen
             val prefs = getSharedPreferences("satfinder_prefs", MODE_PRIVATE)
-            prefs.edit().clear().apply()
-            overlayText.text = "Keine oder ungültige TLE-Daten. Bitte wählen Sie einen Satelliten."
+            prefs.edit { clear() }
+            overlayText.text = getString(R.string.no_valid_tle_data)
             // Auswahl-Dialog starten
             val intent = Intent(this, SatelliteSelectionActivity::class.java)
             selectSatelliteLauncher.launch(intent)
@@ -162,37 +168,80 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         }
     }
 
+    private fun requestManualGpsFix() {
+        if (!PermissionHelper.isPermissionGranted(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            Toast.makeText(this, "GPS permission required", Toast.LENGTH_SHORT).show()
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+            return
+        }
+
+        Toast.makeText(this, "Getting GPS fix...", Toast.LENGTH_SHORT).show()
+        getFixButton.text = getString(R.string.getting_fix)
+        getFixButton.isEnabled = false
+
+        // Starte GPS-Updates für 30 Sekunden
+        locationHelper.startLocationUpdates()
+
+        // Stoppe GPS-Updates nach 30 Sekunden automatisch
+        getFixButton.postDelayed({
+            locationHelper.stopLocationUpdates()
+            getFixButton.text = getString(R.string.get_fix)
+            getFixButton.isEnabled = true
+            Toast.makeText(this, getString(R.string.gps_fix_attempt_finished), Toast.LENGTH_SHORT).show()
+        }, 30000) // 30 Sekunden
+    }
+
     // Overlay-logic outsourced
     @SuppressLint("SetTextI18n")
     private fun updateOverlay() {
-        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) {
-            overlayText.text = "No TLE-data. Select satellite."
-            return
+        try {
+            // Defensive Programmierung - prüfe alle kritischen Variablen
+            if (!::overlayText.isInitialized) {
+                Log.w("MainActivity", "updateOverlay: overlayText not initialized yet")
+                return
+            }
+
+            // Verwende die neue sichere Funktion
+            OverlayViewHelper.updateOverlaySafe(
+                context = this,
+                overlayText = overlayText,
+                tle1 = tle1,
+                tle2 = tle2,
+                satName = satName,
+                location = lastGoodLocation
+            )
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error in updateOverlay: ${e.message}", e)
+            overlayText.text = "Error updating overlay. Check logs."
         }
-        OverlayViewHelper.updateOverlay(
-            context = this,
-            overlayText = overlayText,
-            tle1 = tle1,
-            tle2 = tle2,
-            satName = satName,
-            lastGoodLocation = lastGoodLocation,
-            aosTime = aosTime,
-            losTime = losTime
-        )
     }
 
     // FixStatus-Logik ausgelagert
     private fun updateFixStatus() {
-        if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) return
-        OverlayViewHelper.updateFixStatus(
-            context = this,
-            overlayText = overlayText,
-            lastGoodLocation = lastGoodLocation,
-            tle1 = tle1,
-            tle2 = tle2,
-            getFixColor = OverlayViewHelper::getFixColor,
-            getGpsStatus = OverlayViewHelper::getGpsStatus
-        )
+        try {
+            // Defensive Programmierung - prüfe alle kritischen Variablen
+            if (!::overlayText.isInitialized) {
+                Log.w("MainActivity", "updateFixStatus: overlayText not initialized yet")
+                return
+            }
+
+            if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2)) {
+                Log.d("MainActivity", "updateFixStatus: No valid TLE data")
+                return
+            }
+
+            OverlayViewHelper.updateFixStatus(
+                context = this,
+                overlayText = overlayText,
+                lastGoodLocation = lastGoodLocation,
+                tle1 = tle1,
+                tle2 = tle2,
+                getFixColor = OverlayViewHelper::getFixColor,
+                getGpsStatus = OverlayViewHelper::getGpsStatus
+            )
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error in updateFixStatus: ${e.message}", e)
+        }
     }
 
     override fun onResume() {
@@ -217,13 +266,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         LifecycleHelper.unregisterSensorListener(sensorManager, this)
     }
 
-    private fun startLocationUpdates() {
-        locationHelper.startLocationUpdates()
-    }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val (azimuth, pitch) = SensorHelper.getAzimuthAndPitch(event)
+            val (azimuth, pitch) = SensorHelper.calculateAzimuthAndPitch(event)
             currentAzimuth = azimuth
             currentPitch = pitch
             updateSatelliteDirection()
@@ -266,16 +312,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
             lastGoodLocation = location
             PreferencesHelper.saveLocation(this, location)
         }
-        OverlayViewHelper.updateOverlay(
-            context = this,
-            overlayText = overlayText,
-            tle1 = tle1,
-            tle2 = tle2,
-            satName = satName,
-            lastGoodLocation = lastGoodLocation,
-            aosTime = aosTime,
-            losTime = losTime
-        )
+        // Entferne doppelte Overlay-Berechnung - wird bereits in updateSatelliteDirection() gemacht
         updateSatelliteDirection()
 
         // Position aktualisieren OHNE Zoom zu ändern
@@ -298,31 +335,33 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
         if (!OverlayViewHelper.isValidTleLine(tle1) || !OverlayViewHelper.isValidTleLine(tle2) || location == null) {
             return
         }
+
+        // Alle Berechnungen sind jetzt im OverlayViewHelper gekapselt
+        OverlayViewHelper.updateSatelliteDirectionOverlay(
+            overlayText = overlayText,
+            location = location,
+            satName = satName,
+            currentAzimuth = currentAzimuth,
+            currentPitch = currentPitch,
+            tle1 = tle1!!,
+            tle2 = tle2!!
+        )
+
+        // Für die Karte und Pfeile brauchen wir noch die Berechnungen hier
         val now = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).time
-        val epoch = TleHelper.extractEpochFromTle(tle1!!)
+        val epoch = TleHelper.extractEpochFromTle(tle1)
         if (epoch == null) {
             Log.e("Sgp4Debug", "updateSatelliteDirection: Epoch not actualized")
             return
         }
-        val satPos = SatelliteMathHelper.getSatellitePosition(tle1!!, tle2!!, now, epoch)
+        val satPos = SatelliteMathHelper.getSatellitePosition(tle1, tle2, now, epoch)
         if (satPos != null) {
-            // UI-Update ausgelagert
-            OverlayViewHelper.updateSatelliteDirectionOverlay(
-                overlayText = overlayText,
-                location = location,
-                satPos = satPos,
-                satName = satName,
-                currentAzimuth = currentAzimuth,
-                currentPitch = currentPitch,
-                tle1 = tle1!!,
-                tle2 = tle2!!
-            )
             val azimuth = SatelliteMathHelper.calculateAzimuth(location.latitude, location.longitude, satPos.lat, satPos.lon)
             val elevation = SatelliteMathHelper.calculateElevation(location.latitude, location.longitude, location.altitude, satPos.lat, satPos.lon, satPos.alt)
             val azimuthGeo = (450 - azimuth) % 360
             val azimuthFixed = if (azimuthGeo < 0) azimuthGeo + 360 else azimuthGeo
             val azError = ((azimuthFixed - currentAzimuth + 540) % 360) - 180
-            val elError = elevation - getDeviceLookElevation()
+            val elError = getDeviceLookElevation() - elevation
 
             // Karte leeren (entfernt alte Kreise und Marker) und dann neu befüllen
             googleMap?.clear()
@@ -334,7 +373,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener,
                 .title("Present Position"))
 
             // Empfangskreis auf der Karte anzeigen
-            MapHelper.addCurrentSatelliteCoverage(googleMap, satPos)
+            MapHelper.addSatelliteMarker(googleMap, satPos, satName)
+
+            // Roten Empfangskreis hinzufügen
+            MapHelper.addSatelliteReceptionCircle(googleMap, location, satPos)
 
             Log.d("Sgp4Debug", "elevation=$elevation, deviceLookElevation=${getDeviceLookElevation()}, elError=$elError, azError=$azError, currentAzimuth=$currentAzimuth, currentPitch=$currentPitch")
             updateAzimuthBar(azError)

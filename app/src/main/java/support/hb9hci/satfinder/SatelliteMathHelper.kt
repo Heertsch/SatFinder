@@ -2,19 +2,20 @@ package support.hb9hci.satfinder
 
 import android.location.Location
 import java.util.Date
+import java.util.Locale
 import kotlin.math.*
 
 object SatelliteMathHelper {
     fun calculateAzimuth(observerLat: Double, observerLon: Double, satLat: Double, satLon: Double): Double {
-        return SatMathUtil.calculateAzimuth(observerLat, observerLon, satLat, satLon)
+        return SatMath.calculateAzimuth(observerLat, observerLon, satLat, satLon)
     }
 
     fun calculateElevation(observerLat: Double, observerLon: Double, observerAlt: Double, satLat: Double, satLon: Double, satAlt: Double): Double {
-        return SatMathUtil.calculateSatelliteElevation(observerLat, observerLon, observerAlt, satLat, satLon, satAlt)
+        return SatMath.calculateSatelliteElevation(observerLat, observerLon, observerAlt, satLat, satLon, satAlt)
     }
 
     fun calculateDistance(observerLat: Double, observerLon: Double, observerAlt: Double, satLat: Double, satLon: Double, satAlt: Double): Double {
-        return SatMathUtil.calculateDistance(observerLat, observerLon, observerAlt, satLat, satLon, satAlt)
+        return SatMath.calculateDistanceKm(observerLat, observerLon, satLat, satLon) * 1000.0 // Convert to meters
     }
 
     fun calculateRadialSpeed(
@@ -50,6 +51,34 @@ object SatelliteMathHelper {
         val vzFut = satZFut - obsZ
         val distFut = sqrt(vxFut*vxFut + vyFut*vyFut + vzFut*vzFut)
         return (distFut - distNow) / dtSec
+    }
+
+    /**
+     * Berechnet die Radialgeschwindigkeit und gibt sie als formatierten String in km/s zurück
+     */
+    fun calculateAndFormatRadialSpeed(
+        observer: Location,
+        tle1: String,
+        tle2: String,
+        satPosNow: Sgp4Util.SatPos,
+        epoch: Date,
+        dtSec: Double = 10.0
+    ): String {
+        return try {
+            val now = Date()
+            val futureDate = Date(now.time + (dtSec * 1000).toLong())
+            val satPosFuture = getSatellitePosition(tle1, tle2, futureDate, epoch)
+
+            if (satPosFuture != null) {
+                val radialSpeedMs = calculateRadialSpeed(observer, satPosNow, satPosFuture, dtSec)
+                val radialSpeedKms = radialSpeedMs / 1000.0 // Convert m/s to km/s
+                String.format(Locale.US, "%+.3f km/s", radialSpeedKms)
+            } else {
+                "--"
+            }
+        } catch (e: Exception) {
+            "--"
+        }
     }
 
     fun getSatellitePosition(tle1: String, tle2: String, date: Date, epoch: Date): Sgp4Util.SatPos? {

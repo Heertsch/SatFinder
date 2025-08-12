@@ -3,4 +3,8 @@
     <string name="initial_overlay_text">
     Azimuth: 0.0°\nElevation: 0.0°\nDistance: 0.0 km\nGPS: No Fix</string>
     <string name="SelectSat">Select a Satellite</string>
+    <string name="getting_fix">Getting Fix...</string>
+    <string name="no_valid_tle_data">No valid TLE-Data. Select Satellite.</string>
+    <string name="get_fix">Get Fix</string>
+    <string name="gps_fix_attempt_finished">GPS fix attempt finished</string>
 </resources>

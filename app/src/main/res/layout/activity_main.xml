@@ -48,12 +48,25 @@
             android:gravity="center_horizontal" />
     </LinearLayout>
 
-    <!-- Button -->
-    <Button
-        android:id="@+id/selectSatelliteButton"
+    <!-- Buttons in horizontaler Anordnung -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/SelectSat"
+        android:orientation="horizontal"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="24dp">
+
+        <Button
+            android:id="@+id/selectSatelliteButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/SelectSat"
+            android:layout_marginEnd="16dp" />
+
+        <Button
+            android:id="@+id/getFixButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Get Fix" />
+    </LinearLayout>
 </FrameLayout>

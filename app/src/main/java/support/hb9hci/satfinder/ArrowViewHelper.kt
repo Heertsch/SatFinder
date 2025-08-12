@@ -2,68 +2,95 @@ package support.hb9hci.satfinder
 
 import android.view.View
 import kotlin.math.abs
+import kotlin.math.min
 
 object ArrowViewHelper {
+
+    private const val MAX_ERROR_DEGREES = 90.0 // Maximaler Fehler für Skalierung
+
     fun updateAzimuthBar(azimuthArrow: View, error: Double) {
-        val parent = azimuthArrow.parent as View
-        val maxWidthPx = parent.width * 0.4 // Maximum 40% of parent width
-        val length = (abs(error) / 180.0 * maxWidthPx).toInt().coerceAtLeast((20 * azimuthArrow.resources.displayMetrics.density).toInt())
+        // Horizontaler Azimuth-Pfeil (blau)
+        val errorAbs = abs(error)
 
-        val layout = azimuthArrow.layoutParams
-        layout.width = length
-        layout.height = (26 * azimuthArrow.resources.displayMetrics.density).toInt() // +10px dicker
-        azimuthArrow.layoutParams = layout
+        // Länge basierend auf Abweichung berechnen (Skalierungsfaktor zwischen 0.1 und 3.0)
+        val lengthFactor = min(errorAbs / MAX_ERROR_DEGREES, 1.0)
+        val scaleFactor = 0.1f + lengthFactor.toFloat() * 2.9f // 0.1 bis 3.0
 
-        // Pivot at the tip (where it should point to center)
-        azimuthArrow.pivotX = length.toFloat() // Pivot an der Spitze
-        azimuthArrow.pivotY = azimuthArrow.height / 2f
-        azimuthArrow.y = (parent.height / 2f) - (azimuthArrow.height / 2f)
+        // Horizontale Skalierung für Azimuth-Abweichung (X-Achse)
+        azimuthArrow.scaleX = scaleFactor
+        azimuthArrow.scaleY = 1.0f // Höhe bleibt konstant
 
-        // Pfeilspitze soll zum Zentrum zeigen
+        // Position und Rotation so dass PFEILENDE im Zentrum ist
+        val screenWidth = azimuthArrow.context.resources.displayMetrics.widthPixels
+        val screenHeight = azimuthArrow.context.resources.displayMetrics.heightPixels
+        val centerX = screenWidth / 2f
+        val centerY = screenHeight / 2f
+
+        // Setze Pivot-Punkt für Skalierung
         if (error > 0) {
-            // Handy zu weit links -> Pfeil von links zum Zentrum (Spitze nach rechts)
-            azimuthArrow.x = (parent.width / 2f) - length
-            azimuthArrow.rotation = 0f // Original-Richtung nach rechts
+            // Handy muss nach links - Pfeil zeigt nach rechts (gespiegelt)
+            azimuthArrow.pivotX = azimuthArrow.width.toFloat() // Pivot am rechten Ende
+            azimuthArrow.pivotY = azimuthArrow.height / 2f
+            azimuthArrow.x = centerX - azimuthArrow.width // Rechtes Ende (Pivot) im Zentrum
+            azimuthArrow.y = centerY - azimuthArrow.height / 2f
+            azimuthArrow.rotation = 180f // Gedreht, Spitze zeigt nach rechts (gespiegelt)
         } else {
-            // Handy zu weit rechts -> Pfeil von rechts zum Zentrum (Spitze nach links)
-            azimuthArrow.x = (parent.width / 2f)
-            azimuthArrow.rotation = 180f // Gedreht nach links
+            // Handy muss nach rechts - Pfeil zeigt nach links (gespiegelt)
+            azimuthArrow.pivotX = azimuthArrow.width.toFloat() // Pivot am rechten Ende
+            azimuthArrow.pivotY = azimuthArrow.height / 2f
+            azimuthArrow.x = centerX - azimuthArrow.width // Rechtes Ende (Pivot) im Zentrum
+            azimuthArrow.y = centerY - azimuthArrow.height / 2f
+            azimuthArrow.rotation = 0f // Normal, Spitze zeigt nach links (gespiegelt)
         }
-        azimuthArrow.bringToFront()
+
+        // Farb-Feedback durch Transparenz
+        azimuthArrow.alpha = when {
+            errorAbs < 5.0 -> 1.0f   // Sehr genau - vollständig sichtbar
+            errorAbs < 15.0 -> 0.8f  // Mäßig genau - leicht transparent
+            else -> 0.6f             // Ungenau - deutlich transparent
+        }
     }
 
     fun updateElevationBar(elevationArrow: View, error: Double) {
-        val parent = elevationArrow.parent as View
-        val minLengthPx = (20 * elevationArrow.resources.displayMetrics.density).toInt()
-        val maxHeightPx = if (parent.height > 0) (parent.height.toDouble() * 0.3) else (minLengthPx * 2).toDouble()
-        // Arrow length: 0 if error=0, grows with |error|, but at least minLengthPx if error!=0
-        val length = if (abs(error) < 1.0) 0 else (abs(error) / 90.0 * maxHeightPx).toInt().coerceAtLeast(minLengthPx)
+        // Vertikaler Elevation-Pfeil (grün)
+        val errorAbs = abs(error)
 
-        val layout = elevationArrow.layoutParams
-        layout.width = (26 * elevationArrow.resources.displayMetrics.density).toInt() // +10px dicker
-        layout.height = length
-        elevationArrow.layoutParams = layout
+        // Länge basierend auf Abweichung berechnen (Skalierungsfaktor zwischen 0.1 und 3.0)
+        val lengthFactor = min(errorAbs / MAX_ERROR_DEGREES, 1.0)
+        val scaleFactor = 0.1f + lengthFactor.toFloat() * 2.9f // 0.1 bis 3.0
 
-        // Pivot at the tip (where it should point to center)
-        elevationArrow.pivotX = elevationArrow.width / 2f
-        elevationArrow.pivotY = length.toFloat() // Pivot an der Spitze
-        elevationArrow.x = (parent.width / 2f) - (elevationArrow.width / 2f)
+        // Vertikale Skalierung für Elevation-Abweichung (Y-Achse)
+        elevationArrow.scaleX = 1.0f // Breite bleibt konstant
+        elevationArrow.scaleY = scaleFactor
 
-        if (length == 0) {
-            elevationArrow.visibility = View.INVISIBLE
+        // Position und Rotation so dass PFEILENDE im Zentrum ist
+        val screenWidth = elevationArrow.context.resources.displayMetrics.widthPixels
+        val screenHeight = elevationArrow.context.resources.displayMetrics.heightPixels
+        val centerX = screenWidth / 2f
+        val centerY = screenHeight / 2f
+
+        // Setze Pivot-Punkt für Skalierung
+        if (error > 0) {
+            // Handy muss nach unten - Pfeil zeigt nach oben (gespiegelt)
+            elevationArrow.pivotX = elevationArrow.width / 2f
+            elevationArrow.pivotY = elevationArrow.height.toFloat() // Pivot am unteren Ende
+            elevationArrow.x = centerX - elevationArrow.width / 2f
+            elevationArrow.y = centerY - elevationArrow.height // Unteres Ende (Pivot) im Zentrum
+            elevationArrow.rotation = 180f // Gedreht, Spitze zeigt nach oben (gespiegelt)
         } else {
-            elevationArrow.visibility = View.VISIBLE
-            // Pfeilspitze soll zum Zentrum zeigen - Position and Rotation anpassen
-            if (error > 0) {
-                // Satellit ist höher -> Pfeil von unten zum Zentrum (Spitze nach oben)
-                elevationArrow.y = (parent.height / 2f) - length
-                elevationArrow.rotation = 0f // Original-Richtung nach unten, aber von unten positioniert
-            } else {
-                // Satellit ist niedriger -> Pfeil von oben zum Zentrum (Spitze nach unten)
-                elevationArrow.y = (parent.height / 2f)
-                elevationArrow.rotation = 180f // Gedreht nach oben, aber von oben positioniert
-            }
-            elevationArrow.bringToFront()
+            // Handy muss nach oben - Pfeil zeigt nach unten (gespiegelt)
+            elevationArrow.pivotX = elevationArrow.width / 2f
+            elevationArrow.pivotY = elevationArrow.height.toFloat() // Pivot am unteren Ende
+            elevationArrow.x = centerX - elevationArrow.width / 2f
+            elevationArrow.y = centerY - elevationArrow.height // Unteres Ende (Pivot) im Zentrum
+            elevationArrow.rotation = 0f // Normal, Spitze zeigt nach unten (gespiegelt)
+        }
+
+        // Farb-Feedback durch Transparenz
+        elevationArrow.alpha = when {
+            errorAbs < 5.0 -> 1.0f   // Sehr genau - vollständig sichtbar
+            errorAbs < 15.0 -> 0.8f  // Mäßig genau - leicht transparent
+            else -> 0.6f             // Ungenau - deutlich transparent
         }
     }
 }
